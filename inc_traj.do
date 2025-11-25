@@ -182,7 +182,6 @@ gen cohort = .
 	tab cohort, m
 	
 // Number of residential moves 
-
 gen moves = nmoves_0to6_sum2 + nmoves_7to15_sum2
 	replace moves = nmoves_0to6_sum2 if moves==.
 	replace moves = nmoves_7to15_sum2 if moves==.
@@ -217,6 +216,14 @@ recode father_age_at_birth (min/24.999999 = 1) (25.0/34.99999 = 2) (35.0/44.9999
 			tab far_age, m
 	
 	tab mor_age far_age, m
+	
+tab mor_age, m 	
+	replace mor_age=0 if mor_age==. // Mother age not stated = 0 
+	tab mor_age, m 	
+
+tab far_age, m
+	replace far_age=0 if far_age==. // Father age not stated = 0 
+	tab mor_age, m 	
 	
 // Deprivation quintile at birth 
 tab dep5_birth
@@ -1073,7 +1080,6 @@ log close
 /////////////////////////////////////////////////////////////////////////////////
 **# 04	LOGISTIC REGRESSION
 /////////////////////////////////////////////////////////////////////////////////
-
 {
 log using "P:\0PS_Kirkbride-Merle Schlief\Logs\regressions", replace
 * NOTE - mig is coded that mig=2 is COM and mig=3 is SB to SB parents. Set mig=3 as reference
@@ -1113,16 +1119,30 @@ logit bp_nopsyc ib6.traj_group##ib3.mig sex cohort parent_smi  mor_age far_age m
 
 // Step 2 - found evidence of interactions, so report stratified results. 
 *this can be done by fitting stratum-specific regressions or the lincom post-estimation command. 
-*the unadjusted estimates from these two approaches are identical, but there are very small differences in the adjusted results. Discussed with statistician, and while both approaches are statistically appropriate, the stratified regressions are more flexible and simipler to understand and explain (although looses some statistical efficiency). Have produced both estimates, but will report those generated from stratified regressions. 
+*the unadjusted estimates from these two approaches are identical, but there are very small differences in the adjusted results. Discussed with statistician, and while both approaches are statistically appropriate, the stratified regressions are more flexible and simipler to understand and explain (although loses some statistical efficiency). Have produced both estimates, but will report those generated from stratified regressions. 
 
 //stratified regressions
+*Unadjusted
+bysort mig: logit smi ib6.traj_group, or
+bysort mig: logit naff ib6.traj_group, or 
+bysort mig: logit bp_psyc ib6.traj_group, or 
+bysort mig: logit bp_nopsyc ib6.traj_group, or 
+ 
+
+*Adjusted
+bysort mig: logit smi ib6.traj_group sex cohort parent_smi  mor_age far_age moves2 dep5_birth popdens_birth, or 
+bysort mig: logit naff ib6.traj_group sex cohort parent_smi  mor_age far_age moves2 dep5_birth popdens_birth, or 
+bysort mig: logit bp_psyc ib6.traj_group sex cohort parent_smi  mor_age far_age moves2 dep5_birth popdens_birth, or 
+bysort mig: logit bp_nopsyc ib6.traj_group sex cohort parent_smi  mor_age far_age moves2 dep5_birth popdens_birth, or 
+
+
+//Regressions with lincom post-estimation for stratum-specific results
 *Unadjusted
 logit smi ib6.traj_group##ib3.mig, or
 logit naff ib6.traj_group##ib3.mig, or 
 logit bp_psyc ib6.traj_group##ib3.mig, or 
 logit bp_nopsyc ib6.traj_group##ib3.mig, or 
  
-
 *Adjusted
 logit smi ib6.traj_group##ib3.mig sex cohort parent_smi  mor_age far_age moves2 dep5_birth popdens_birth, or 
 logit naff ib6.traj_group##ib3.mig sex cohort parent_smi  mor_age far_age moves2 dep5_birth popdens_birth, or 
@@ -1130,7 +1150,7 @@ logit bp_psyc ib6.traj_group##ib3.mig sex cohort parent_smi  mor_age far_age mov
 logit bp_nopsyc ib6.traj_group##ib3.mig sex cohort parent_smi  mor_age far_age moves2 dep5_birth popdens_birth, or 
 
 
-//Regressions with lincom post-estimation for stratum-specific results
+// Regressions with lincom post-estimation for stratum-specific results
 *smi - Unadjusted  
 logit smi ib6.traj_group##ib3.mig, or 
 	lincom 1.traj_group + 2.mig#1.traj_group , or 
@@ -1269,16 +1289,41 @@ log close
 **# 05	MISSINGNESS & SENSITIVITY 
 /////////////////////////////////////////////////////////////////////////////////
 {
+cd "P:\0PS_Kirkbride-Merle Schlief\Data\"
+use analytic_final.dta, clear
+
+keep lopnr traj_group smi naff bp_psyc bp_nopsyc mig sex cohort moves2  popdens3 dep5_birth  mor_age far_age parent_smi  inc_birth 
+
+merge 1:1 lopnr using "P:\0PS_Kirkbride-Merle Schlief\Data\cohortH03_2016_003_msc_inctraj_merle_v03.dta"
+	drop _merge
+	
+drop if birthyear<1990
+drop if birthyear==1997
+
+tab traj_group, m
+
+gen missing=0
+	replace missing=1 if traj_group==.
+	tab missing, m
+	
+save missingness.dta, replace 
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// Gen variables needed to compare missing to non missing 
+	
 log using "P:\0PS_Kirkbride-Merle Schlief\Logs\missingness", replace
 cd "P:\0PS_Kirkbride-Merle Schlief\Data"
 use analytic, clear
 
 gen missing=0
 	replace missing=1 if traj_group==.
-	replace missing=1 if sams_birth==.
 	replace missing = 1 if mig==4
 	replace missing =1 if popdens3==.
 	replace missing =1 if dep5_birth==.
+	replace missing=1 if mor_age==.
+	replace missing=1 if far_age==.
 tab missing, m
 
 tab missing kon, row m 
@@ -1291,6 +1336,10 @@ bysort missing: count if sams_birth==.
 tab missing dep5_birth, row m 
 tab missing popdens3, row m 
 tab missing traj_group, row m 
+tab missing smi, row m 
+tab missing naff, row m
+tab missing bp_psyc, row m
+tab missing bp_nopsyc, row m
 
 // Regression predicting missingness 
 logit missing ib2.kon, or
@@ -1301,6 +1350,12 @@ logit missing i.far_age, or
 logit missing ib5.dep5_birth, or 
 logit missing i.popdens3, or 
 logit missing ib6.traj_group, or 
+logit missing i.smi, or
+logit missing i.naff, or
+logit missing i.bp_psyc, or
+logit missing i.bp_nopsyc, or
+
+
 
 //Complete case - dropping anyone missing mother or father age 
 drop if mor_age==0 | far_age==0
